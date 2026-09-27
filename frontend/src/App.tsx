@@ -81,15 +81,6 @@ export default function App() {
             </Suspense>
           }
         />
-        <Route
-          path="/composer/template/new"
-          element={
-            <Suspense fallback={<ComposerFallback />}>
-              <ComposerHome autoCreate />
-            </Suspense>
-          }
-        />
-
         {/* Admin-only routes */}
         {user?.role === 'admin' && (
           <>

@@ -1,30 +1,24 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
-import { getCampaignFieldDefinitions, renderCampaignPreview } from '../services/api';
 import toast from 'react-hot-toast';
 import FileUpload from '../components/FileUpload';
 import ColumnMapper from '../components/ColumnMapper';
-import EditorSelector from '../components/EditorSelector';
 import MergeFieldManager from '../components/MergeFieldManager';
 import type { MergeFieldDef } from '../components/MergeFieldManager';
 import PreviewPane from '../editors/PreviewPane';
 import WizardShell from '../components/WizardShell';
 import WizardActionBar from '../components/WizardActionBar';
-import AutosaveStatus from '../components/AutosaveStatus';
-import RecipientPreviewNavigator from '../components/RecipientPreviewNavigator';
 import RecipientTable from '../components/RecipientTable';
-import TemplateFieldBindingPanel from '../components/TemplateFieldBindingPanel';
-import Modal from '../components/ui/Modal';
 import type {
-  EditorType, ColumnMapping, ThemeConfig, UploadResponse, UploadStatus,
-  SenderIdentity, Template, MergeFieldDefinition, TemplateFieldBinding, PreviewRecipient,
+  ColumnMapping, ThemeConfig, UploadResponse, UploadStatus,
+  SenderIdentity,
   CampaignListItem,
 } from '../types';
 import {
-  ArrowLeft, ArrowRight, Clock, Check, PenLine, FileText,
-  AlertCircle, Loader2, Rocket, CalendarClock, Upload, Users, Search, Save, PanelsTopLeft
+  ArrowLeft, ArrowRight, Clock, Check, Sparkles, ShieldCheck,
+  AlertCircle, Loader2, Rocket, CalendarClock, Upload, Users, Search, PanelsTopLeft
 } from 'lucide-react';
 
 const STEPS = ['Details', 'Recipients', 'Map Columns', 'Compose', 'Review & Send'];
@@ -66,39 +60,14 @@ export default function CampaignWizard() {
   const [columnMapping, setColumnMapping] = useState<ColumnMapping>({ email_column: '' });
   const [mergeFields, setMergeFields] = useState<MergeFieldDef[]>([]);
 
-  // Step 4: Compose
-  const [composeMode, setComposeMode] = useState<'scratch' | 'template' | null>(null);
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [loadingTemplates, setLoadingTemplates] = useState(false);
-  const [editorType, setEditorType] = useState<EditorType>('custom');
+  // Step 4: Compose — content itself is designed and published in the composer;
+  // this wizard only tracks whether published content exists yet.
   const [htmlBody, setHtmlBody] = useState('');
-  const [contentJson, setContentJson] = useState('');
   const [themeConfig, setThemeConfig] = useState<ThemeConfig | null>(null);
-
+  const [contentStatus, setContentStatus] = useState<'published' | 'draft' | null>(null);
 
   // Step 5: Schedule
   const [scheduleAt, setScheduleAt] = useState('');
-
-  // Canonical field system
-  const [campaignFieldDefs, setCampaignFieldDefs] = useState<MergeFieldDefinition[]>([]);
-  const [templateFieldBindings, setTemplateFieldBindings] = useState<TemplateFieldBinding[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
-
-  // Template binding modal
-  const [showBindingModal, setShowBindingModal] = useState(false);
-  const [pendingTemplate, setPendingTemplate] = useState<Template | null>(null);
-  const [bindingTemplateFields, setBindingTemplateFields] = useState<MergeFieldDefinition[]>([]);
-  const [bindingSampleValues, setBindingSampleValues] = useState<Record<string, string>>({});
-
-  // Live preview
-  const [previewRecipient, setPreviewRecipient] = useState<PreviewRecipient | null>(null);
-  const [previewHtml, setPreviewHtml] = useState('');
-
-  // Autosave
-  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const saveVersionRef = useRef(0);
 
   useEffect(() => { loadSenderIdentities(); }, []);
 
@@ -116,11 +85,16 @@ export default function CampaignWizard() {
         if (c.preheader) setPreheader(c.preheader);
         if (c.sender_identity_id) setSelectedIdentityId(c.sender_identity_id);
         if (c.from_name) { setCustomFromName(c.from_name); setUseCustomName(true); }
-        if (c.editor_type) setEditorType(c.editor_type as EditorType);
         if (c.html_body) setHtmlBody(c.html_body);
-        if (c.content_json) setContentJson(c.content_json);
         if (c.theme_config) setThemeConfig(c.theme_config);
         if (c.merge_fields_config) setMergeFields(c.merge_fields_config);
+
+        // Whether the composer content behind this campaign has been published —
+        // sending needs published content, a saved draft alone isn't enough.
+        try {
+          const target = await api.get(`/composer/targets/campaign/${code}`);
+          setContentStatus(target.data?.status === 'published' ? 'published' : 'draft');
+        } catch { setContentStatus(null); }
 
         let recipientsOk = (c.total_recipients || 0) > 0;
         try {
@@ -163,11 +137,7 @@ export default function CampaignWizard() {
         } catch { /* ignore */ }
 
         const hasContent = !!(c.html_body && String(c.html_body).trim());
-        let landing = 1;
-        if (!recipientsOk) landing = 1;
-        else if (!hasContent) landing = 3;
-        else landing = 3;
-        setComposeMode(hasContent ? 'scratch' : null);
+        const landing = recipientsOk ? 3 : 1;
         setHighestStepReached(hasContent ? 4 : recipientsOk ? 3 : 1);
         setStep(landing);
       } catch {
@@ -214,9 +184,12 @@ export default function CampaignWizard() {
         // Update existing campaign
         await api.patch(`/campaigns/${campaignCode}`, payload);
       } else {
-        // Create new campaign
+        // Create new campaign, then move the URL onto its edit route so the
+        // campaign id is never only held in local state — leaving for the
+        // composer and coming back (or a page refresh) must not lose it.
         const res = await api.post('/campaigns/', payload);
         setCampaignCode(res.data.public_code);
+        navigate(`/campaigns/${res.data.public_code}/edit`, { replace: true });
       }
       goStep(1);
     } catch (err: any) {
@@ -282,170 +255,6 @@ export default function CampaignWizard() {
     } finally { setLoading(false); }
   };
 
-  const handleSaveContent = async () => {
-    if (!campaignCode) return;
-    setLoading(true);
-    try {
-      await api.patch(`/campaigns/${campaignCode}`, {
-        editor_type: editorType,
-        content_json: contentJson,
-        html_body: htmlBody,
-        theme_config: themeConfig,
-        merge_fields_config: mergeFields,
-      });
-      goStep(4);
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to save content');
-    } finally { setLoading(false); }
-  };
-
-  const handleLoadTemplates = async () => {
-    setLoadingTemplates(true);
-    try { const res = await api.get('/templates/'); setTemplates(res.data); }
-    catch { toast.error('Failed to load templates'); }
-    finally { setLoadingTemplates(false); }
-  };
-
-  const handleSelectTemplate = (template: Template) => {
-    // If template has canonical field definitions, show binding modal
-    const templateDefs = template.merge_field_definitions_json || [];
-    if (templateDefs.length > 0 && campaignFieldDefs.length > 0) {
-      setPendingTemplate(template);
-      setBindingTemplateFields(templateDefs);
-      // Auto-map first
-      const autoBindings = templateDefs.map(tf => {
-        const match = campaignFieldDefs.find(cf => cf.key === tf.key || cf.key === tf.key.toLowerCase());
-        return { template_field_key: tf.key, campaign_field_key: match?.key || null };
-      });
-      setTemplateFieldBindings(autoBindings);
-      setShowBindingModal(true);
-      return;
-    }
-    
-    // No template fields to bind — just apply directly
-    applyTemplate(template, []);
-  };
-
-  const applyTemplate = async (template: Template, bindings: TemplateFieldBinding[]) => {
-    setEditorType(template.editor_type as EditorType);
-    setHtmlBody(template.html_output || '');
-    setContentJson(template.content_json || '');
-    if (template.theme_config) { try { setThemeConfig(JSON.parse(template.theme_config)); } catch { /* */ } }
-    if (template.merge_fields_config) {
-      try {
-        const tmplFields: MergeFieldDef[] = JSON.parse(template.merge_fields_config);
-        const existingNames = new Set(mergeFields.map(f => f.name));
-        setMergeFields([...mergeFields, ...tmplFields.filter(f => !existingNames.has(f.name))]);
-      } catch { /* */ }
-    }
-    setSelectedTemplateId(template.id ?? null);
-    setTemplateFieldBindings(bindings);
-    setComposeMode('scratch');
-    setShowBindingModal(false);
-    setPendingTemplate(null);
-    
-    // Persist template selection and bindings
-    if (campaignCode) {
-      try {
-        await api.patch(`/campaigns/${campaignCode}`, {
-          selected_template_id: template.id,
-          template_field_bindings_json: bindings,
-        });
-      } catch { /* non-blocking */ }
-    }
-    toast.success(`Template "${template.name}" applied`);
-  };
-
-  const handleBindingApply = (bindings: TemplateFieldBinding[]) => {
-    if (pendingTemplate) {
-      applyTemplate(pendingTemplate, bindings);
-    }
-  };
-
-  // Load campaign field definitions when entering compose
-  const loadFieldDefinitions = useCallback(async () => {
-    if (!campaignCode) return;
-    try {
-      const data = await getCampaignFieldDefinitions(campaignCode);
-      if (data.field_definitions) setCampaignFieldDefs(data.field_definitions);
-      if (data.template_field_bindings) setTemplateFieldBindings(data.template_field_bindings);
-      if (data.selected_template_id) setSelectedTemplateId(data.selected_template_id);
-      if (data.sample_values) setBindingSampleValues(data.sample_values);
-    } catch { /* non-critical */ }
-  }, [campaignCode]);
-
-  useEffect(() => {
-    if (step === 3 && campaignCode) loadFieldDefinitions();
-  }, [step, campaignCode, loadFieldDefinitions]);
-
-  // Debounced autosave
-  const triggerAutosave = useCallback(() => {
-    if (!campaignCode || !htmlBody) return;
-    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    
-    const version = ++saveVersionRef.current;
-    autosaveTimerRef.current = setTimeout(async () => {
-      if (saveVersionRef.current !== version) return; // stale
-      setAutosaveStatus('saving');
-      try {
-        await api.patch(`/campaigns/${campaignCode}`, {
-          editor_type: editorType,
-          content_json: contentJson,
-          html_body: htmlBody,
-          theme_config: themeConfig,
-          merge_fields_config: mergeFields,
-          campaign_field_definitions_json: campaignFieldDefs.length > 0 ? campaignFieldDefs : undefined,
-          template_field_bindings_json: templateFieldBindings.length > 0 ? templateFieldBindings : undefined,
-          selected_template_id: selectedTemplateId,
-        });
-        if (saveVersionRef.current === version) {
-          setAutosaveStatus('saved');
-          setLastSavedAt(new Date());
-        }
-      } catch {
-        if (saveVersionRef.current === version) setAutosaveStatus('error');
-      }
-    }, 1500);
-  }, [campaignCode, editorType, contentJson, htmlBody, themeConfig, mergeFields, campaignFieldDefs, templateFieldBindings, selectedTemplateId]);
-
-  // Trigger autosave when compose content changes
-  useEffect(() => {
-    if (step === 3 && htmlBody) triggerAutosave();
-  }, [htmlBody, contentJson, themeConfig]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Debounced preview rendering
-  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const renderPreview = useCallback((recipient?: PreviewRecipient) => {
-    if (!campaignCode) return;
-    if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
-    previewTimerRef.current = setTimeout(async () => {
-      try {
-        const data = await renderCampaignPreview(campaignCode, {
-          recipient_index: recipient?.index ?? previewRecipient?.index ?? 0,
-          subject, preheader, html: htmlBody,
-        });
-        setPreviewHtml(data.html);
-      } catch { /* non-critical */ }
-    }, 350);
-  }, [campaignCode, subject, preheader, htmlBody, previewRecipient]);
-
-  useEffect(() => {
-    if (step === 3 && campaignCode && htmlBody && (composeMode === 'scratch' || htmlBody)) {
-      renderPreview();
-    }
-  }, [htmlBody, subject, preheader]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleRecipientChange = useCallback((recipient: PreviewRecipient) => {
-    setPreviewRecipient(recipient);
-    renderPreview(recipient);
-  }, [renderPreview]);
-
-  // Insert merge field into editor
-  const handleInsertMergeField = (key: string) => {
-    // Dispatch custom event that editors listen to
-    window.dispatchEvent(new CustomEvent('insert-merge-field', { detail: { key } }));
-  };
-
   const handleSend = async () => {
     if (!campaignCode) return;
     setLoading(true);
@@ -466,15 +275,10 @@ export default function CampaignWizard() {
 
   // Footer content per step
   const renderFooter = () => {
-    const autosaveCenter = step === 3 ? (
-      <AutosaveStatus status={autosaveStatus} lastSavedAt={lastSavedAt} onRetry={triggerAutosave} />
-    ) : null;
-
     switch (step) {
       case 0:
         return (
           <WizardActionBar
-            center={autosaveCenter}
             right={
               <button onClick={handleCreateCampaign} disabled={loading || !selectedIdentityId} className="btn-primary">
                 {loading ? <Loader2 size={16} className="animate-spin" /> : null}
@@ -494,11 +298,11 @@ export default function CampaignWizard() {
                   {' · '}
                   {recipientTotal.toLocaleString()} total
                 </span>
-              ) : autosaveCenter
+              ) : null
             }
             right={
               hasRecipients && includedCount > 0 ? (
-                <button type="button" onClick={() => { setComposeMode(htmlBody ? 'scratch' : null); goStep(3); }} className="btn-primary">
+                <button type="button" onClick={() => goStep(3)} className="btn-primary">
                   Continue to Compose <ArrowRight size={16} />
                 </button>
               ) : undefined
@@ -509,7 +313,6 @@ export default function CampaignWizard() {
         return (
           <WizardActionBar
             left={<button type="button" onClick={() => goStep(1)} className="btn-secondary"><ArrowLeft size={16} /> Back</button>}
-            center={autosaveCenter}
             right={
               uploadResult ? (
                 <button type="button" onClick={handleMappingComplete} disabled={!columnMapping.email_column || loading} className="btn-primary">
@@ -539,19 +342,10 @@ export default function CampaignWizard() {
                 <ArrowLeft size={16} /> Back
               </button>
             }
-            center={autosaveCenter}
             right={
-              (composeMode === 'scratch' || htmlBody) ? (
-                <div className="flex items-center gap-2">
-                  <button onClick={() => triggerAutosave()} className="btn-secondary hidden sm:flex">
-                    <Save size={14} /> Save Draft
-                  </button>
-                  <button onClick={handleSaveContent} disabled={!htmlBody || loading} className="btn-primary">
-                    {loading ? <Loader2 size={16} className="animate-spin" /> : null}
-                    Review & Send <ArrowRight size={16} />
-                  </button>
-                </div>
-              ) : undefined
+              <button type="button" onClick={() => goStep(4)} disabled={!htmlBody} className="btn-primary">
+                Review & Send <ArrowRight size={16} />
+              </button>
             }
           />
         );
@@ -559,7 +353,6 @@ export default function CampaignWizard() {
         return (
           <WizardActionBar
             left={<button onClick={() => goStep(3)} className="btn-secondary"><ArrowLeft size={16} /> Back</button>}
-            center={autosaveCenter}
             right={
               <button
                 type="button"
@@ -824,171 +617,58 @@ export default function CampaignWizard() {
             </div>
           )}
 
-          {/* Step 3: Compose */}
-          {step === 3 && (
+          {/* Step 3: Compose — design happens in the composer, a separate full-screen workspace */}
+          {step === 3 && campaignCode && (
             <div className="space-y-6">
-              {campaignCode && (
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand-100 bg-brand-50/60 px-3 py-2">
-                  <p className="text-xs text-brand-900">
-                    Prefer the new composer? It adds a block editor, HTML editor with validation, revisions and test sends.
+              <div>
+                <h2 className="section-title">Compose the email</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Design the email in the composer: blocks or HTML, merge fields from your uploaded columns, live
+                  preview per recipient, validation and test sends.
+                </p>
+              </div>
+
+              <div className="card-static p-8 flex flex-col items-center text-center gap-4">
+                <div className="w-16 h-16 bg-gradient-to-br from-brand-100 to-accent-100 rounded-2xl flex items-center justify-center">
+                  <Sparkles size={28} className="text-brand-600" />
+                </div>
+                <div>
+                  <p className="font-display font-semibold text-gray-900">
+                    {htmlBody ? 'Continue composing' : 'Open the composer to start'}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/composer/campaign/${campaignCode}`)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-50"
-                  >
-                    <PanelsTopLeft size={14} />
-                    Open in new composer
-                  </button>
+                  <p className="text-xs text-gray-500 mt-1.5 max-w-sm">
+                    {contentStatus === 'draft'
+                      ? 'A draft is saved but not published yet — publish it in the composer so it can be sent.'
+                      : 'Content is designed and published there; this wizard picks it up automatically when you come back.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/composer/campaign/${campaignCode}`)}
+                  className="btn-primary"
+                >
+                  <PanelsTopLeft size={16} /> {htmlBody ? 'Open composer' : 'Start composing'}
+                </button>
+                {contentStatus === 'draft' && (
+                  <p className="flex items-center gap-1.5 text-xs text-amber-600">
+                    <AlertCircle size={13} /> Unpublished draft — open the composer and publish before sending
+                  </p>
+                )}
+              </div>
+
+              {htmlBody && (
+                <div className="card-static overflow-hidden">
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                      <ShieldCheck size={14} className="text-emerald-500" /> Published content
+                    </h3>
+                    <span className="text-xs text-gray-500">Subject: {subject || '—'}</span>
+                  </div>
+                  <div className="p-4">
+                    <PreviewPane html={htmlBody} themeConfig={themeConfig} />
+                  </div>
                 </div>
               )}
-              {/* Compose Mode Selection — only show if no content yet */}
-              {composeMode === null && !htmlBody && (
-                <>
-                  <div>
-                    <h2 className="section-title">How would you like to compose?</h2>
-                    <p className="text-sm text-gray-500 mt-1">Choose your starting point</p>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <motion.button
-                      whileHover={{ scale: 1.02, y: -2 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setComposeMode('scratch')}
-                      className="flex flex-col items-center gap-4 p-8 border-2 border-gray-200 rounded-2xl hover:border-brand-400 hover:shadow-glow transition-all group text-left"
-                    >
-                      <div className="w-16 h-16 bg-gradient-to-br from-brand-100 to-accent-100 rounded-2xl flex items-center justify-center group-hover:shadow-lg transition-shadow">
-                        <PenLine size={28} className="text-brand-600" />
-                      </div>
-                      <div className="text-center">
-                        <span className="font-display font-semibold text-gray-900">Start from Scratch</span>
-                        <p className="text-xs text-gray-500 mt-1.5">Open the editor and compose from a blank canvas</p>
-                      </div>
-                    </motion.button>
-                    <motion.button
-                      whileHover={{ scale: 1.02, y: -2 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => { setComposeMode('template'); handleLoadTemplates(); }}
-                      className="flex flex-col items-center gap-4 p-8 border-2 border-gray-200 rounded-2xl hover:border-accent-400 hover:shadow-glow transition-all group text-left"
-                    >
-                      <div className="w-16 h-16 bg-gradient-to-br from-accent-100 to-pink-100 rounded-2xl flex items-center justify-center group-hover:shadow-lg transition-shadow">
-                        <FileText size={28} className="text-accent-600" />
-                      </div>
-                      <div className="text-center">
-                        <span className="font-display font-semibold text-gray-900">Choose a Template</span>
-                        <p className="text-xs text-gray-500 mt-1.5">Start with a pre-built template and customize it</p>
-                      </div>
-                    </motion.button>
-                  </div>
-                </>
-              )}
-
-              {/* Template Selection */}
-              {composeMode === 'template' && !htmlBody && (
-                <>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="section-title">Choose a Template</h2>
-                      <p className="text-sm text-gray-500 mt-1">{templates.length} template{templates.length !== 1 ? 's' : ''} available</p>
-                    </div>
-                    <button onClick={() => setComposeMode(null)} className="btn-ghost text-sm">
-                      ← Back to options
-                    </button>
-                  </div>
-                  {loadingTemplates ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      {[1, 2, 3].map(i => (
-                        <div key={i} className="card-static p-4 space-y-3">
-                          <div className="skeleton h-24 rounded-xl" />
-                          <div className="skeleton h-4 w-32" />
-                          <div className="skeleton h-3 w-20" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : templates.length === 0 ? (
-                    <div className="text-center py-16">
-                      <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gray-100 flex items-center justify-center">
-                        <FileText size={28} className="text-gray-300" />
-                      </div>
-                      <p className="text-gray-500 font-medium">No templates yet</p>
-                      <button onClick={() => setComposeMode('scratch')} className="text-sm text-brand-600 hover:underline mt-2">
-                        Start from scratch instead
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      {templates.map(tmpl => (
-                        <motion.button
-                          key={tmpl.id}
-                          whileHover={{ y: -3 }}
-                          onClick={() => handleSelectTemplate(tmpl)}
-                          className="card text-left p-4 group"
-                        >
-                          <div className="h-24 bg-gray-50 rounded-xl mb-3 flex items-center justify-center group-hover:bg-accent-50 transition-colors">
-                            <FileText size={24} className="text-gray-300 group-hover:text-accent-400 transition-colors" />
-                          </div>
-                          <p className="text-sm font-semibold text-gray-800 truncate">{tmpl.name}</p>
-                          <p className="text-xs text-gray-500 mt-0.5 truncate">{tmpl.description || 'No description'}</p>
-                          <span className="badge-gray mt-2 text-[10px] capitalize">{tmpl.editor_type}</span>
-                        </motion.button>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Editor — show when composing */}
-              {(composeMode === 'scratch' || (composeMode === 'template' && htmlBody) || (composeMode === null && htmlBody)) && (
-                <>
-                  <div className="flex-1 min-h-[500px] h-[70vh] max-h-[calc(100vh-220px)] flex flex-col">
-                    <EditorSelector editorType={editorType} onEditorTypeChange={setEditorType}
-                      htmlBody={htmlBody} onHtmlChange={setHtmlBody}
-                      contentJson={contentJson} onContentJsonChange={setContentJson}
-                      mergeFields={mergeFields.map(f => ({ name: f.name, label: f.label }))}
-                      themeConfig={themeConfig}
-                      // Compose workspace props
-                      editorContext="campaign"
-                      subject={subject}
-                      onSubjectChange={setSubject}
-                      preheader={preheader}
-                      onPreheaderChange={setPreheader}
-                      senderIdentity={selectedIdentity}
-                      onChangeSender={() => goStep(0)}
-                      totalRecipients={includedCount || uploadStatus?.valid_rows || 0}
-                      onViewRecipients={() => goStep(1)}
-                      campaignMergeFields={campaignFieldDefs}
-                      onInsertMergeField={handleInsertMergeField}
-                      onThemeChange={setThemeConfig}
-                      onSave={triggerAutosave}
-                      onReviewSend={handleSaveContent}
-                      sidePanel={
-                        <div className="flex flex-col h-full">
-                          {campaignCode && (
-                            <RecipientPreviewNavigator
-                              campaignCode={campaignCode}
-                              onRecipientChange={handleRecipientChange}
-                            />
-                          )}
-                          <div className="flex-1 min-h-0 overflow-y-auto p-3">
-                            <PreviewPane html={previewHtml || htmlBody} themeConfig={themeConfig} />
-                          </div>
-                        </div>
-                      }
-                    />
-                  </div>
-                </>
-              )}
-
-              {/* Template Binding Modal */}
-              <Modal open={showBindingModal} onClose={() => setShowBindingModal(false)} title="Map Template Fields" width="xl">
-                <TemplateFieldBindingPanel
-                  templateFields={bindingTemplateFields}
-                  campaignFields={campaignFieldDefs}
-                  initialBindings={templateFieldBindings}
-                  sampleValues={bindingSampleValues}
-                  onApply={handleBindingApply}
-                  onCancel={() => setShowBindingModal(false)}
-                />
-              </Modal>
             </div>
           )}
 
@@ -1012,8 +692,10 @@ export default function CampaignWizard() {
                     <span className="text-sm font-semibold text-gray-900 max-w-[200px] truncate">{subject}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">Editor</span>
-                    <span className="badge-purple capitalize">{editorType}</span>
+                    <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">Content</span>
+                    <span className={contentStatus === 'published' ? 'badge-success' : 'badge-warning'}>
+                      {contentStatus === 'published' ? 'Published' : 'Draft'}
+                    </span>
                   </div>
                 </div>
                 <div className="bg-gray-50 rounded-xl p-4 space-y-2.5">

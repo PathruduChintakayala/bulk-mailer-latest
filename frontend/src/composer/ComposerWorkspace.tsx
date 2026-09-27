@@ -167,18 +167,23 @@ export function ComposerWorkspace({ targetType, targetCode }: { targetType: Targ
     return () => window.removeEventListener('beforeunload', handler);
   }, [saveStatus]);
 
+  // Always a real, working destination — never history's `-1`, which does
+  // nothing when the composer was opened directly (a link, a refresh, a new
+  // tab) rather than by clicking through from within the app.
+  const exitTo = targetType === 'template' ? '/templates' : `/campaigns/${targetCode}${canEdit ? '/edit' : ''}`;
+
   const leave = useCallback(() => {
     if (saveStatus === 'dirty' || saveStatus === 'failed') {
       const choice = window.confirm('You have unsaved changes. Save before leaving?\n\nOK saves, Cancel discards.');
       if (choice) {
         void store.save().then(ok => {
-          if (ok) navigate(-1);
+          if (ok) navigate(exitTo);
         });
         return;
       }
     }
-    navigate(-1);
-  }, [navigate, saveStatus, store]);
+    navigate(exitTo);
+  }, [navigate, saveStatus, store, exitTo]);
 
   // ── inspector actions ───────────────────────────────────────────────────────
   const actions: InspectorActions = useMemo(

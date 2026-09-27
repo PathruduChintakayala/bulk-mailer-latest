@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete, update
 from app.database import get_db
 from app.models.user import User
 from app.models.template import Template
+from app.models.campaign import Campaign
+from app.models.composer import TemplateRevision, ValidationReportRecord
 from app.schemas.template import (
     TemplateCreate, TemplateUpdate, TemplateResponse,
     TemplatePreviewRenderRequest, TemplatePreviewRenderResponse,
@@ -121,6 +123,24 @@ async def delete_template(
     template = result.scalar_one_or_none()
     if not template:
         raise HTTPException(404, "Template not found")
+
+    # Composer revisions are not cascade-deleted with the template. Left behind,
+    # they become a real bug: SQLite reuses a deleted row's integer id, so a
+    # template created afterwards can land on the same id and inherit these
+    # orphaned revisions — a brand new template opens showing old content.
+    revision_ids = (await db.execute(
+        select(TemplateRevision.id).where(TemplateRevision.template_id == template.id)
+    )).scalars().all()
+    if revision_ids:
+        await db.execute(delete(ValidationReportRecord).where(ValidationReportRecord.revision_id.in_(revision_ids)))
+        await db.execute(delete(TemplateRevision).where(TemplateRevision.template_id == template.id))
+
+    # Campaigns that had this template selected keep their own saved content;
+    # only the now-dangling reference to this template is cleared.
+    await db.execute(
+        update(Campaign).where(Campaign.selected_template_id == template.id).values(selected_template_id=None)
+    )
+
     await db.delete(template)
     await db.commit()
 

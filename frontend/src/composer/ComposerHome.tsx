@@ -26,14 +26,36 @@ import { SelectInput, TextArea, TextInput } from './ui/controls';
 
 type Tab = 'templates' | 'campaigns';
 
-export default function ComposerHome({ autoCreate = false }: { autoCreate?: boolean }) {
+const AUTO_CREATE_KEY = 'composer:auto-create-template';
+
+export default function ComposerHome() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('templates');
   const [templates, setTemplates] = useState<ComposerTemplateListItem[]>([]);
   const [campaigns, setCampaigns] = useState<ComposerCampaignListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [term, setTerm] = useState('');
-  const [createOpen, setCreateOpen] = useState(autoCreate);
+  // Opened once by a one-shot flag set right before navigating here (see the
+  // Templates page's "New Composer" button), never by the URL itself — so a
+  // refresh straight onto a stale /composer/template/new-style URL can't
+  // reopen it uninvited.
+  //
+  // The flag is deliberately *not* cleared on mount. This route can genuinely
+  // mount more than once for the same visit — a Suspense-wrapped lazy route
+  // resolving, React 18 Strict Mode's dev-only double-render — and clearing a
+  // read-once flag in an effect races those extra mounts: whichever one runs
+  // last finds the flag already gone and renders closed, even though the
+  // flag was set for this very visit. Reading it is safe to repeat as often
+  // as React likes; it's only cleared once something the user actually did
+  // resolves it — Cancel or a successful create, both via closeCreateDialog.
+  const [createOpen, setCreateOpen] = useState(() => {
+    try { return sessionStorage.getItem(AUTO_CREATE_KEY) === '1'; } catch { return false; }
+  });
+
+  const closeCreateDialog = useCallback(() => {
+    setCreateOpen(false);
+    try { sessionStorage.removeItem(AUTO_CREATE_KEY); } catch { /* private browsing */ }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -208,9 +230,9 @@ export default function ComposerHome({ autoCreate = false }: { autoCreate?: bool
 
       <CreateTemplateDialog
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={closeCreateDialog}
         templates={templates}
-        onCreated={code => navigate(`/composer/template/${code}`)}
+        onCreated={code => { closeCreateDialog(); navigate(`/composer/template/${code}`); }}
       />
     </div>
   );

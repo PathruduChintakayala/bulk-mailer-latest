@@ -16,7 +16,11 @@ import StatusBadge from '../components/ui/StatusBadge';
 import IconButton from '../components/ui/IconButton';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import RecipientTable from '../components/RecipientTable';
-import { AreaTrend, DonutStatus, FunnelBars } from '../components/charts/SimpleCharts';
+import { ChartCard, TrendChart, trendTable, StatusDonut, FunnelSteps } from '../components/charts/Charts';
+import { SERIES } from '../components/charts/chartTheme';
+
+const ACTIVITY_KEYS = ['opens', 'clicks'];
+const ACTIVITY_LABELS = { opens: 'Opens', clicks: 'Clicks' };
 
 type TabKey = 'overview' | 'activity' | 'links' | 'recipients';
 
@@ -167,6 +171,28 @@ export default function CampaignDetail() {
   const deliveryRate = stats.sent_count > 0
     ? ((Math.max(stats.sent_count - stats.bounced_count, 0) / stats.sent_count) * 100) : 0;
   const showQueue = status !== 'draft' && !!queue;
+
+  const funnelSteps = [
+    { label: 'Recipients', value: analytics?.funnel?.included ?? stats.total_recipients },
+    { label: 'Sent', value: analytics?.funnel?.sent ?? stats.sent_count },
+    { label: 'Delivered', value: Math.max((analytics?.funnel?.sent ?? stats.sent_count) - stats.bounced_count, 0) },
+    { label: 'Opened', value: analytics?.funnel?.opened ?? stats.opened_count },
+    { label: 'Clicked', value: analytics?.funnel?.clicked ?? stats.clicked_count },
+  ];
+  const byStatus: Record<string, number> = queue?.by_status ?? analytics?.by_status ?? {};
+  const statusData = ['sent', 'pending', 'sending', 'failed', 'bounced', 'unsubscribed']
+    .map(key => ({ key, value: Number(byStatus[key] || 0) }));
+
+  const activity = (() => {
+    const map = new Map<string, { bucket: string; opens: number; clicks: number }>();
+    for (const row of eventSeries?.opens || []) map.set(row.bucket, { bucket: row.bucket, opens: row.count, clicks: 0 });
+    for (const row of eventSeries?.clicks || []) {
+      const e = map.get(row.bucket) || { bucket: row.bucket, opens: 0, clicks: 0 };
+      e.clicks = row.count;
+      map.set(row.bucket, e);
+    }
+    return Array.from(map.values()).sort((a, b) => a.bucket.localeCompare(b.bucket));
+  })();
   const recipientFilters: { value: string; label: string; count?: number }[] = [
     { value: '', label: 'All', count: queue?.total },
     { value: 'pending,sending', label: 'Pending', count: queue?.queued },
@@ -341,27 +367,28 @@ export default function CampaignDetail() {
           </motion.div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="card-static p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Engagement funnel</h3>
-              <FunnelBars steps={[
-                { label: 'Included', value: analytics?.funnel?.included ?? stats.total_recipients },
-                { label: 'Sent', value: analytics?.funnel?.sent ?? stats.sent_count },
-                { label: 'Opened', value: analytics?.funnel?.opened ?? stats.opened_count },
-                { label: 'Clicked', value: analytics?.funnel?.clicked ?? stats.clicked_count },
-                { label: 'Unsubscribed', value: analytics?.funnel?.unsubscribed ?? stats.unsubscribed_count },
-              ]} />
+            <ChartCard
+              title="From recipients to clicks"
+              subtitle="Each step as a share of the recipients"
+              table={{ columns: ['Step', 'Recipients'], rows: funnelSteps.map(s => [s.label, s.value]) }}
+            >
+              <FunnelSteps steps={funnelSteps} />
               {analytics?.duration_seconds != null && (
-                <p className="text-xs text-gray-500 mt-4">
-                  Send duration: {Math.round(analytics.duration_seconds / 60)} min
+                <p className="text-xs text-gray-500 mt-3">
+                  Sending took {formatDuration(analytics.duration_seconds)}
                 </p>
               )}
-            </div>
-            <div className="card-static p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Recipient status</h3>
-              <DonutStatus data={Object.entries(analytics?.by_status || {}).map(([name, value]) => ({
-                name, value: Number(value),
-              }))} />
-            </div>
+            </ChartCard>
+            <ChartCard
+              title="Recipients by status"
+              subtitle="Where every recipient stands now"
+              table={{
+                columns: ['Status', 'Recipients'],
+                rows: statusData.filter(s => s.value > 0).map(s => [s.key, s.value]),
+              }}
+            >
+              <StatusDonut data={statusData} />
+            </ChartCard>
           </div>
 
           <div className="card-static p-6">
@@ -375,31 +402,34 @@ export default function CampaignDetail() {
               )}
               <DetailRow icon={CheckCircle2} label="Delivery Rate" value={`${(analytics?.rates?.delivery ?? deliveryRate).toFixed(1)}%`} />
               <DetailRow icon={UserMinus} label="Unsubscribed" value={String(stats.unsubscribed_count)} />
-              <DetailRow icon={Calendar} label="Created" value={campaign.created_at ? new Date(campaign.created_at).toLocaleString() : '—'} />
-              <DetailRow icon={Clock} label="Scheduled" value={campaign.scheduled_at ? new Date(campaign.scheduled_at).toLocaleString() : '—'} />
+              <DetailRow icon={Calendar} label="Created" value={campaign.created_at ? new Date(toUtc(campaign.created_at)).toLocaleString() : '—'} />
+              <DetailRow icon={Clock} label="Scheduled" value={campaign.scheduled_at ? new Date(toUtc(campaign.scheduled_at)).toLocaleString() : '—'} />
             </div>
           </div>
         </>
       )}
 
       {tab === 'activity' && (
-        <div className="card-static p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Open & click activity</h3>
-          <AreaTrend
-            data={(() => {
-              const map = new Map<string, { bucket: string; opens: number; clicks: number }>();
-              for (const row of eventSeries?.opens || []) map.set(row.bucket, { bucket: row.bucket, opens: row.count, clicks: 0 });
-              for (const row of eventSeries?.clicks || []) {
-                const e = map.get(row.bucket) || { bucket: row.bucket, opens: 0, clicks: 0 };
-                e.clicks = row.count;
-                map.set(row.bucket, e);
-              }
-              return Array.from(map.values()).sort((a, b) => a.bucket.localeCompare(b.bucket));
-            })()}
-            keys={['opens', 'clicks']}
-            labels={{ opens: 'Opens', clicks: 'Clicks' }}
-          />
-        </div>
+        <ChartCard
+          title="Opens and clicks"
+          subtitle="Per hour, in your local time"
+          table={activity.length ? trendTable(activity, ACTIVITY_KEYS, ACTIVITY_LABELS) : undefined}
+        >
+          {activity.length ? (
+            <TrendChart
+              data={activity}
+              keys={ACTIVITY_KEYS}
+              labels={ACTIVITY_LABELS}
+              colors={[SERIES.opens, SERIES.clicks]}
+              height={300}
+            />
+          ) : (
+            <div className="h-[300px] flex flex-col items-center justify-center text-sm text-gray-500 text-center px-6">
+              <p>No opens or clicks recorded yet.</p>
+              <p className="mt-1 text-xs">They are counted only for emails sent while tracking is on (Settings → Email Provider).</p>
+            </div>
+          )}
+        </ChartCard>
       )}
 
       {tab === 'links' && (

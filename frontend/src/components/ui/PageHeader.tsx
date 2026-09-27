@@ -19,7 +19,7 @@ export default function PageHeader({ title, subtitle, actions, leading }: Props)
         </div>
       </div>
       {actions && (
-        <div className="flex items-center gap-2 flex-wrap shrink-0 sm:justify-end sm:pt-0.5">
+        <div className="flex items-center gap-2 flex-wrap min-w-0 sm:shrink-0 sm:justify-end sm:pt-0.5">
           {actions}
         </div>
       )}
