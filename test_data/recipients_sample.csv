@@ -1,0 +1,31 @@
+﻿Email,First Name,Last Name,Company,Position,City,Country,Phone,Signup Date,Plan
+john.doe@example.com,John,Doe,Acme Corp,CEO,New York,USA,+1-555-0101,2024-01-15,Enterprise
+jane.smith@techstart.io,Jane,Smith,TechStart,CTO,San Francisco,USA,+1-555-0102,2024-02-20,Pro
+mike.wilson@globalinc.com,Mike,Wilson,Global Inc,VP Sales,London,UK,+44-20-7946-0958,2024-03-01,Business
+sarah.connor@skynet.ai,Sarah,Connor,SkyNet AI,Director,Los Angeles,USA,+1-555-0104,2024-03-15,Enterprise
+david.chen@startup.co,David,Chen,StartupCo,Founder,Austin,USA,+1-555-0105,2024-04-01,Starter
+emma.thompson@designs.uk,Emma,Thompson,Creative Designs,Lead Designer,Manchester,UK,+44-161-555-0106,2024-04-10,Pro
+carlos.garcia@latamtech.mx,Carlos,Garcia,LatAm Tech,Engineer,Mexico City,Mexico,+52-55-5555-0107,2024-04-20,Business
+priya.patel@indiasoft.in,Priya,Patel,IndiaSoft,Product Manager,Bangalore,India,+91-80-5555-0108,2024-05-01,Enterprise
+thomas.mueller@berlin.de,Thomas,Mueller,Berlin Digital,Marketing Head,Berlin,Germany,+49-30-5555-0109,2024-05-15,Pro
+akiko.tanaka@tokyo.jp,Akiko,Tanaka,Tokyo Innovations,UX Lead,Tokyo,Japan,+81-3-5555-0110,2024-06-01,Business
+robert.johnson@finance.com,Robert,Johnson,FinanceFirst,CFO,Chicago,USA,+1-555-0111,2024-06-10,Enterprise
+lisa.anderson@healthtech.org,Lisa,Anderson,HealthTech,Research Lead,Boston,USA,+1-555-0112,2024-06-20,Pro
+omar.hassan@dubai.ae,Omar,Hassan,Gulf Ventures,Partner,Dubai,UAE,+971-4-555-0113,2024-07-01,Enterprise
+sofia.rossi@milano.it,Sofia,Rossi,Milano Digital,Art Director,Milan,Italy,+39-02-555-0114,2024-07-10,Business
+alex.kim@seoul.kr,Alex,Kim,Seoul Tech,Backend Dev,Seoul,South Korea,+82-2-555-0115,2024-07-15,Starter
+rachel.green@nydesign.com,Rachel,Green,NY Design Studio,Creative Director,New York,USA,+1-555-0116,2024-07-20,Pro
+james.williams@lawfirm.co.uk,James,Williams,Williams and Partners,Senior Partner,Edinburgh,UK,+44-131-555-0117,2024-08-01,Enterprise
+maria.gonzalez@barcelona.es,Maria,Gonzalez,Barcelona Labs,Data Scientist,Barcelona,Spain,+34-93-555-0118,2024-08-10,Business
+kevin.brown@automate.io,Kevin,Brown,AutomateCo,DevOps Lead,Seattle,USA,+1-555-0119,2024-08-15,Pro
+anna.svensson@stockholm.se,Anna,Svensson,Nordic Solutions,CEO,Stockholm,Sweden,+46-8-555-0120,2024-08-20,Enterprise
+peter.wright@sydney.au,Peter,Wright,Down Under Tech,Solution Architect,Sydney,Australia,+61-2-5555-0121,2024-09-01,Business
+yuki.yamamoto@osaka.jp,Yuki,Yamamoto,Osaka Systems,QA Engineer,Osaka,Japan,+81-6-5555-0122,2024-09-10,Starter
+daniel.smith@toronto.ca,Daniel,Smith,MapleLeaf Digital,Frontend Dev,Toronto,Canada,+1-416-555-0123,2024-09-15,Pro
+fatima.ali@cairo.eg,Fatima,Ali,Nile Tech,Business Analyst,Cairo,Egypt,+20-2-555-0124,2024-09-20,Business
+lucas.dubois@paris.fr,Lucas,Dubois,Paris Innovations,Growth Hacker,Paris,France,+33-1-555-0125,2024-10-01,Enterprise
+nina.petrova@moscow.ru,Nina,Petrova,RusTech,Project Manager,Moscow,Russia,+7-495-555-0126,2024-10-10,Pro
+ben.taylor@melbourne.au,Ben,Taylor,OzTech,Full Stack Dev,Melbourne,Australia,+61-3-5555-0127,2024-10-15,Business
+chiara.ferrari@roma.it,Chiara,Ferrari,Roma Digital,UX Researcher,Rome,Italy,+39-06-555-0128,2024-10-20,Starter
+marcus.johnson@cape.za,Marcus,Johnson,Cape Innovations,Tech Lead,Cape Town,South Africa,+27-21-555-0129,2024-11-01,Enterprise
+hana.kim@busan.kr,Hana,Kim,Busan Software,Mobile Dev,Busan,South Korea,+82-51-555-0130,2024-11-10,Pro

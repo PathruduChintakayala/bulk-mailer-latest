@@ -1,0 +1,135 @@
+"""
+Email provider configuration saved from the Settings page.
+
+The settings table is the source of truth; this module copies it onto the
+runtime `settings` object so the senders and the queue worker pick it up, both
+right after a save and again on every startup.
+"""
+import json
+import logging
+from typing import Optional
+from urllib.parse import urlparse
+
+from sqlalchemy import select
+
+from app.config import settings
+from app.models.settings_model import AppSettings
+
+logger = logging.getLogger(__name__)
+
+SETTINGS_KEY = "email_provider"
+SECRET_FIELDS = ("smtp_password", "ses_secret_key", "imap_password")
+
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1", ""}
+
+
+async def read_provider_config(db) -> dict:
+    """The stored provider configuration, secrets included."""
+    result = await db.execute(select(AppSettings).where(AppSettings.key == SETTINGS_KEY))
+    setting = result.scalar_one_or_none()
+    if not setting or not setting.value:
+        return {}
+    try:
+        value = json.loads(setting.value)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def public_provider_config(config: dict) -> dict:
+    """The configuration as it may be returned to the browser: no secrets."""
+    public = {k: v for k, v in config.items() if k not in SECRET_FIELDS}
+    for field in SECRET_FIELDS:
+        public[f"{field}_set"] = bool(config.get(field))
+    return public
+
+
+def apply_provider_config(config: dict) -> None:
+    """Copy a stored configuration onto the runtime settings."""
+    if not config:
+        return
+
+    provider = (config.get("provider") or "").lower()
+    if provider in ("ses", "smtp"):
+        settings.EMAIL_PROVIDER = provider
+
+    if config.get("ses_region"):
+        settings.AWS_REGION = config["ses_region"]
+    if config.get("ses_access_key"):
+        settings.AWS_ACCESS_KEY_ID = config["ses_access_key"]
+    if config.get("ses_secret_key"):
+        settings.AWS_SECRET_ACCESS_KEY = config["ses_secret_key"]
+    if config.get("sandbox_mode") is not None:
+        settings.SES_SANDBOX_MODE = bool(config["sandbox_mode"])
+
+    if "smtp_host" in config:
+        settings.SMTP_HOST = (config.get("smtp_host") or "").strip() or None
+    if config.get("smtp_port"):
+        settings.SMTP_PORT = int(config["smtp_port"])
+    if "smtp_username" in config:
+        settings.SMTP_USERNAME = config.get("smtp_username") or None
+    if "smtp_password" in config:
+        settings.SMTP_PASSWORD = config.get("smtp_password") or None
+    if config.get("smtp_use_tls") is not None:
+        settings.SMTP_USE_TLS = bool(config["smtp_use_tls"])
+
+    if config.get("imap_enabled") is not None:
+        settings.IMAP_ENABLED = bool(config["imap_enabled"])
+    if "imap_host" in config:
+        settings.IMAP_HOST = (config.get("imap_host") or "").strip() or None
+    if config.get("imap_port"):
+        settings.IMAP_PORT = int(config["imap_port"])
+    if "imap_username" in config:
+        settings.IMAP_USERNAME = config.get("imap_username") or None
+    if "imap_password" in config:
+        settings.IMAP_PASSWORD = config.get("imap_password") or None
+    if config.get("imap_folder"):
+        settings.IMAP_FOLDER = config["imap_folder"]
+
+    if config.get("tracking_base_url"):
+        settings.TRACKING_BASE_URL = config["tracking_base_url"].strip().rstrip("/")
+    if "tracking_enabled" in config:
+        settings.TRACKING_ENABLED = config.get("tracking_enabled")
+
+    if config.get("max_send_rate"):
+        settings.MAX_SEND_RATE = int(config["max_send_rate"])
+        from app.services.queue_worker import rate_limiter
+        rate_limiter.update_rate(settings.MAX_SEND_RATE)
+
+
+async def load_provider_config(db) -> dict:
+    """Apply the stored configuration at startup."""
+    config = await read_provider_config(db)
+    if config:
+        apply_provider_config(config)
+        logger.info(f"Email provider loaded from settings: {settings.EMAIL_PROVIDER}")
+    return config
+
+
+def tracking_url_is_public() -> bool:
+    """False while the tracking URL still points at this machine."""
+    host = (urlparse(settings.TRACKING_BASE_URL or "").hostname or "").lower()
+    return host not in _LOCAL_HOSTS
+
+
+def tracking_active() -> bool:
+    """
+    Whether to rewrite links and add the open pixel.
+
+    Left on automatic, tracking is skipped while the tracking URL is local:
+    links rewritten to localhost are dead for every real recipient.
+    """
+    if settings.TRACKING_ENABLED is None:
+        return tracking_url_is_public()
+    return bool(settings.TRACKING_ENABLED)
+
+
+def provider_problem() -> Optional[str]:
+    """Why the active provider cannot send, or None when it looks usable."""
+    if settings.EMAIL_PROVIDER == "smtp":
+        if not settings.SMTP_HOST:
+            return "SMTP is selected but no SMTP host is configured. Set it in Settings > Email Provider."
+        return None
+    # SES may get its credentials from the environment or an instance role,
+    # so missing keys here do not prove it cannot send.
+    return None

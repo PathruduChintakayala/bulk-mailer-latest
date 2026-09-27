@@ -1,0 +1,64 @@
+from pydantic_settings import BaseSettings
+from typing import Optional
+
+
+class Settings(BaseSettings):
+    # App
+    APP_NAME: str = "Bulk Email Sender"
+    DEBUG: bool = False
+    SECRET_KEY: str = "change-this-to-a-secure-random-string"
+    
+    # Database
+    DATABASE_URL: str = "sqlite+aiosqlite:///./data/bulk_email.db"
+    
+    # JWT
+    JWT_SECRET_KEY: str = "jwt-secret-change-this"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    
+    # SES
+    AWS_ACCESS_KEY_ID: Optional[str] = None
+    AWS_SECRET_ACCESS_KEY: Optional[str] = None
+    AWS_REGION: str = "us-east-1"
+    SES_SANDBOX_MODE: bool = True
+    
+    # SMTP
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_USE_TLS: bool = True
+    
+    # IMAP mailbox read for bounces. Blank values follow the SMTP settings.
+    IMAP_ENABLED: bool = False
+    IMAP_HOST: Optional[str] = None
+    IMAP_PORT: int = 993
+    IMAP_USERNAME: Optional[str] = None
+    IMAP_PASSWORD: Optional[str] = None
+    IMAP_FOLDER: str = "INBOX"
+
+    # Email Provider: "ses" or "smtp"
+    EMAIL_PROVIDER: str = "ses"
+    
+    # Rate Limiting
+    MAX_SEND_RATE: int = 14  # emails per second
+    
+    # Upload
+    UPLOAD_DIR: str = "./uploads"
+    MAX_UPLOAD_SIZE_MB: int = 50
+    
+    # Tracking
+    TRACKING_BASE_URL: str = "http://localhost:8000"
+    # None = automatic: track only when TRACKING_BASE_URL is publicly reachable
+    TRACKING_ENABLED: Optional[bool] = None
+    
+    # CORS
+    CORS_ORIGINS: list[str] = ["http://localhost:5173"]
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+
+
+settings = Settings()

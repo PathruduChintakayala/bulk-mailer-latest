@@ -1,0 +1,200 @@
+{
+  "version": 1,
+  "settings": {
+    "contentWidth": 640,
+    "minWidth": 320,
+    "maxWidth": 900,
+    "background": { "mode": "color", "color": "#ffffff" },
+    "outerBackground": { "mode": "color", "color": "#f4f5f7" },
+    "lang": "en",
+    "direction": "ltr"
+  },
+  "themeId": null,
+  "themeOverrides": null,
+  "sections": [
+    {
+      "id": "sec_header",
+      "role": "header",
+      "padding": { "top": 20, "right": 24, "bottom": 20, "left": 24 },
+      "rows": [
+        {
+          "id": "row_header",
+          "gap": 16,
+          "columns": [
+            {
+              "id": "col_logo",
+              "widthPct": 60,
+              "blocks": [
+                {
+                  "id": "blk_logo",
+                  "type": "logo",
+                  "src": "https://cdn.example.com/logo.png",
+                  "alt": "Example Inc logo",
+                  "width": 140,
+                  "align": "left",
+                  "useThemeLogo": false
+                }
+              ]
+            },
+            {
+              "id": "col_vib",
+              "widthPct": 40,
+              "blocks": [
+                { "id": "blk_vib", "type": "viewInBrowser", "label": "View in browser", "align": "right" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec_body",
+      "role": "body",
+      "padding": { "top": 32, "right": 24, "bottom": 32, "left": 24 },
+      "rows": [
+        {
+          "id": "row_body",
+          "columns": [
+            {
+              "id": "col_body",
+              "widthPct": 100,
+              "blocks": [
+                {
+                  "id": "blk_heading",
+                  "type": "heading",
+                  "level": 1,
+                  "html": "Welcome, {{ first_name | default: \"there\" }}",
+                  "padding": { "top": 0, "right": 0, "bottom": 12, "left": 0 }
+                },
+                {
+                  "id": "blk_text",
+                  "type": "text",
+                  "html": "<p>Thanks for joining. Here is what happens next.</p>",
+                  "padding": { "top": 0, "right": 0, "bottom": 16, "left": 0 }
+                },
+                {
+                  "id": "blk_list",
+                  "type": "list",
+                  "ordered": true,
+                  "items": ["Confirm your details", "Choose your preferences", "Start using the product"],
+                  "padding": { "top": 0, "right": 0, "bottom": 20, "left": 0 }
+                },
+                {
+                  "id": "blk_button",
+                  "type": "button",
+                  "text": "Get started",
+                  "align": "left",
+                  "link": { "type": "url", "value": "https://example.com/start", "target": "_blank" }
+                },
+                { "id": "blk_spacer", "type": "spacer", "height": 24 },
+                {
+                  "id": "blk_divider",
+                  "type": "divider",
+                  "thickness": 1,
+                  "widthPct": 100,
+                  "padding": { "top": 8, "right": 0, "bottom": 8, "left": 0 }
+                },
+                {
+                  "id": "blk_table",
+                  "type": "table",
+                  "headerRow": true,
+                  "widthPct": 100,
+                  "rows": [
+                    {
+                      "id": "trow_h",
+                      "cells": [
+                        { "id": "tcel_h1", "html": "Plan", "align": "left" },
+                        { "id": "tcel_h2", "html": "Price", "align": "right" }
+                      ]
+                    },
+                    {
+                      "id": "trow_1",
+                      "cells": [
+                        { "id": "tcel_a1", "html": "Standard", "align": "left" },
+                        { "id": "tcel_a2", "html": "{{ plan_price | format: currency }}", "align": "right" }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec_two_col",
+      "role": "body",
+      "padding": { "top": 0, "right": 24, "bottom": 32, "left": 24 },
+      "rows": [
+        {
+          "id": "row_two",
+          "gap": 16,
+          "stackOnMobile": true,
+          "columns": [
+            {
+              "id": "col_img",
+              "widthPct": 45,
+              "blocks": [
+                {
+                  "id": "blk_img",
+                  "type": "image",
+                  "src": "https://cdn.example.com/feature.png",
+                  "alt": "Product screenshot",
+                  "width": 260,
+                  "align": "left"
+                }
+              ]
+            },
+            {
+              "id": "col_copy",
+              "widthPct": 55,
+              "blocks": [
+                { "id": "blk_h3", "type": "heading", "level": 3, "html": "Built for teams" },
+                { "id": "blk_copy", "type": "text", "html": "<p>Share templates and keep every send on brand.</p>" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec_footer",
+      "role": "footer",
+      "padding": { "top": 16, "right": 24, "bottom": 24, "left": 24 },
+      "background": { "mode": "color", "color": "#f9fafb" },
+      "align": "center",
+      "rows": [
+        {
+          "id": "row_footer",
+          "columns": [
+            {
+              "id": "col_footer",
+              "widthPct": 100,
+              "blocks": [
+                {
+                  "id": "blk_social",
+                  "type": "social",
+                  "align": "center",
+                  "links": [
+                    { "id": "soc_li", "network": "linkedin", "url": "https://www.linkedin.com/company/example", "label": "LinkedIn" },
+                    { "id": "soc_x", "network": "x", "url": "https://x.com/example", "label": "X" }
+                  ]
+                },
+                {
+                  "id": "blk_contact",
+                  "type": "contactInfo",
+                  "useThemeAddress": false,
+                  "organizationName": "Example Inc",
+                  "addressLines": ["100 Example Street", "Springfield, 12345"],
+                  "align": "center"
+                },
+                { "id": "blk_unsub", "type": "unsubscribe", "label": "Unsubscribe", "align": "center" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
